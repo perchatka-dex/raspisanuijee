@@ -3,7 +3,6 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
-import pytz
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -22,6 +21,17 @@ WEEKDAYS_RU = {
     0: "Пнд", 1: "Втр", 2: "Срд",
     3: "Чтв", 4: "Птн", 5: "Сбт"
 }
+
+last_request = {}
+COOLDOWN = 30
+
+def is_rate_limited(chat_id: int) -> bool:
+    now = datetime.now()
+    if chat_id in last_request:
+        if now - last_request[chat_id] < timedelta(seconds=COOLDOWN):
+            return True
+    last_request[chat_id] = now
+    return False
 
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -90,6 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Ты подписан! Буду присылать расписание каждый день в 8:00.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     users.discard(update.effective_chat.id)
@@ -98,7 +109,7 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_rate_limited(update.effective_chat.id):
-        await update.message.reply_text("⏳ Подожди немного перед следующим запросом.")
+        await update.message.reply_text("⏳ Подожди 30 секунд перед следующим запросом.")
         return
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
@@ -106,15 +117,20 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Сегодня выходной 🎉")
         return
     await update.message.reply_text(build_message(day, lessons))
+
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    if is_rate_limited(query.from_user.id):
+        await query.answer("⏳ Подожди 30 секунд.", show_alert=True)
+        return
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
         await query.edit_message_text("Сегодня выходной 🎉")
         return
     await query.edit_message_text(build_message(day, lessons))
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -126,16 +142,6 @@ def main():
     scheduler.add_job(send_daily_schedule, "cron", hour=8, minute=0, args=[app.bot])
     scheduler.add_job(check_changes, "interval", minutes=30, args=[app.bot])
     scheduler.start()
-    # словарь {chat_id: время последнего запроса}
-last_request = {}
-COOLDOWN = 30  # секунд между запросами
-def is_rate_limited(chat_id: int) -> bool:
-    now = datetime.now()
-    if chat_id in last_request:
-        if now - last_request[chat_id] < timedelta(seconds=COOLDOWN):
-            return True
-    last_request[chat_id] = now
-    return False
 
     print("✅ Бот запущен")
     app.run_polling()
