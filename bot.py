@@ -5,8 +5,8 @@ import re
 from datetime import datetime
 
 from dotenv import load_dotenv
-from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from schedule_parser import parse_schedule, format_lesson
@@ -83,8 +83,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     users.add(update.effective_chat.id)
     save_users(users)
-    await update.message.reply_text("✅ Ты подписан! Буду присылать расписание каждый день в 8:00.")
-
+    keyboard = [[InlineKeyboardButton("📅 Расписание на сегодня", callback_data="today")]]
+    await update.message.reply_text(
+        "✅ Ты подписан! Буду присылать расписание каждый день в 8:00.",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     users.discard(update.effective_chat.id)
@@ -98,12 +101,21 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Сегодня выходной 🎉")
         return
     await update.message.reply_text(build_message(day, lessons))
-
+async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    schedule = parse_schedule()
+    day, lessons = get_today_lessons(schedule)
+    if day is None:
+        await query.edit_message_text("Сегодня выходной 🎉")
+        return
+    await query.edit_message_text(build_message(day, lessons))
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("today", today))
+    app.add_handler(CallbackQueryHandler(button_today, pattern="^today$"))
 
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     scheduler.add_job(send_daily_schedule, "cron", hour=8, minute=0, args=[app.bot])
