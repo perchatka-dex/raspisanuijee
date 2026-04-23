@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from zoneinfo import ZoneInfo
 
@@ -97,6 +97,9 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Ты отписан от рассылки.")
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_rate_limited(update.effective_chat.id):
+        await update.message.reply_text("⏳ Подожди немного перед следующим запросом.")
+        return
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
@@ -123,6 +126,16 @@ def main():
     scheduler.add_job(send_daily_schedule, "cron", hour=8, minute=0, args=[app.bot])
     scheduler.add_job(check_changes, "interval", minutes=30, args=[app.bot])
     scheduler.start()
+    # словарь {chat_id: время последнего запроса}
+last_request = {}
+COOLDOWN = 30  # секунд между запросами
+def is_rate_limited(chat_id: int) -> bool:
+    now = datetime.now()
+    if chat_id in last_request:
+        if now - last_request[chat_id] < timedelta(seconds=COOLDOWN):
+            return True
+    last_request[chat_id] = now
+    return False
 
     print("✅ Бот запущен")
     app.run_polling()
