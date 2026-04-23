@@ -3,6 +3,7 @@ import json
 import os
 import re
 from datetime import datetime
+import pytz
 
 from dotenv import load_dotenv
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -32,8 +33,8 @@ def save_users(users):
         json.dump(list(users), f)
 
 def get_today_lessons(schedule):
-    today = datetime.now()
-    abbr = WEEKDAYS_RU.get(today.weekday())
+    moscow = pytz.timezone("Europe/Moscow")
+    today = datetime.now(moscow)  # московское время
     if not abbr:
         return None, {}
     for key, lessons in schedule.items():
