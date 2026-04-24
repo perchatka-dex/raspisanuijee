@@ -118,25 +118,23 @@ def parse_schedule():
 
 def format_lesson(pair_num, lesson):
     time = TIMES.get(pair_num, f"{pair_num}-я пара")
-    emoji_map = {
-        "Лекция": "📖",
-        "Практика": "✏️",
-        "Лабораторная": "🔬",
-        "Экзамен": "📝"
-    }
-    emoji = emoji_map.get(lesson.get("type", ""), "📚")
+    lesson_type = lesson.get("type", "")
+    name = lesson.get("name", "")
+    title = f"{name} ({lesson_type})" if lesson_type else name
 
-    lines = [f"🕐 {time}  |  {pair_num}-я пара"]
-    lines.append(f"{emoji} {lesson.get('type','')}  {lesson.get('name','')}")
+    lines = [f"№{pair_num} · {time}"]
 
     if lesson.get("subgroups"):
         sg = lesson["subgroups"]
-        lines.append(f"👥 1 подгруппа — {sg['1']['teacher']} | каб. {sg['1']['room']}")
-        lines.append(f"👥 2 подгруппа — {sg['2']['teacher']} | каб. {sg['2']['room']}")
+        rooms = f"{sg['1']['room']} / {sg['2']['room']}"
+        lines.append(f"🏫 {rooms}")
+        lines.append(title)
+        lines.append(f"👥 1 п/г: {sg['1']['teacher']} | 2 п/г: {sg['2']['teacher']}")
     else:
+        if lesson.get("room"):
+            lines.append(f"🏫 {lesson['room']}")
+        lines.append(title)
         if lesson.get("teacher"):
             lines.append(f"👤 {lesson['teacher']}")
-        if lesson.get("room"):
-            lines.append(f"🏫 Каб. {lesson['room']}")
 
     return "\n".join(lines)

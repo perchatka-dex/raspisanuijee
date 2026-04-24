@@ -58,10 +58,10 @@ def get_today_lessons(schedule):
 def build_message(day, lessons):
     if not lessons:
         return f"📅 {day}\n\nСегодня пар нет 🎉"
-    lines = [f"📅 {day}\n"]
+    parts = [f"📅 {day}"]
     for num, lesson in sorted(lessons.items()):
-        lines.append(format_lesson(num, lesson))
-    return "\n".join(lines)
+        parts.append(format_lesson(num, lesson))
+    return "\n\n".join(parts)
 
 async def broadcast(bot: Bot, message: str):
     users = load_users()
