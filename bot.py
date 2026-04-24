@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -21,6 +22,36 @@ WEEKDAYS_RU = {
     0: "Пнд", 1: "Втр", 2: "Срд",
     3: "Чтв", 4: "Птн", 5: "Сбт"
 }
+
+JOKES = [
+    "Штирлиц шёл по коридору. Навстречу шёл Мюллер.\n— Штирлиц, вы шпион?\n— Нет.\n— Верю, — сказал Мюллер. — Шпионы так не одеваются.",
+    "— Доктор, я буду жить?\n— А смысл?",
+    "Муж приходит домой и видит жену с чемоданом.\n— Ты куда?\n— От тебя ухожу!\n— А я думал, ты возвращаешься.",
+    "Программист заходит в бар, заказывает 1 пиво, 0 пива, 999999 пива, -1 пиво, NULL пива, выходит через служебный вход.",
+    "— Как дела?\n— Как у всех.\n— Плохо?\n— Нет, не знаю как у всех, но у меня плохо.",
+    "Студент сдаёт экзамен:\n— Билет 1. Всё знаю!\n— Билет 2. Всё знаю!\n— Билет 3. Ничего не знаю.\n— Странно...\n— Я только первые два учил.",
+    "— Почему ты опоздал?\n— Будильник не зазвонил.\n— Почему?\n— Я его не завёл.\n— Почему?\n— Я знал, что опоздаю.",
+    "Встречаются два студента:\n— Ты на лекцию?\n— Нет, я так хожу.",
+    "— Сколько программистов нужно, чтобы вкрутить лампочку?\n— Ни одного, это проблема железа.",
+    "Преподаватель: — Кто не сдаст зачёт, того отчислю!\nСтудент: — А кто сдаст?\nПреподаватель: — Тех удивлюсь.",
+]
+
+def get_random_joke() -> str:
+    return random.choice(JOKES)
+
+def get_joke_from_site() -> str:
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        resp = requests.get("https://anekdoty.ru/pro-shtirlica/", timeout=5)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        items = soup.select("li .holder-body p")
+        if items:
+            item = random.choice(items)
+            return item.get_text(separator="\n").strip()
+    except Exception as e:
+        print(f"Ошибка парсинга анекдота: {e}")
+    return get_random_joke()
 
 last_request = {}
 COOLDOWN = 30
@@ -78,6 +109,8 @@ async def send_daily_schedule(bot: Bot):
     if day is None:
         return
     await broadcast(bot, build_message(day, lessons))
+    joke = get_joke_from_site()
+    await broadcast(bot, f"😄 Анекдот дня:\n\n{joke}")
 
 async def check_changes(bot: Bot):
     schedule = parse_schedule()
@@ -117,6 +150,8 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Сегодня выходной 🎉")
         return
     await update.message.reply_text(build_message(day, lessons))
+    joke = get_joke_from_site()
+    await update.message.reply_text(f"😄 Анекдот дня:\n\n{joke}")
 
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
