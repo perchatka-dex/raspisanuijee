@@ -110,7 +110,7 @@ async def send_daily_schedule(bot: Bot):
         return
     await broadcast(bot, build_message(day, lessons))
     joke = get_joke_from_site()
-    await broadcast(bot, f"😄 Анекдот дня:\n\n{joke}")
+    await broadcast(bot, f"😄 Смехуечка:\n\n{joke}")
 
 async def check_changes(bot: Bot):
     schedule = parse_schedule()
@@ -151,7 +151,7 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text(build_message(day, lessons))
     joke = get_joke_from_site()
-    await update.message.reply_text(f"😄 Анекдот дня:\n\n{joke}")
+    await update.message.reply_text(f"😄 Смехуечка:\n\n{joke}")
 
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
