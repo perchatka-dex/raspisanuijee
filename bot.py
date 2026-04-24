@@ -97,7 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_users(users)
     keyboard = [[InlineKeyboardButton("📅 Расписание на сегодня", callback_data="today")]]
     await update.message.reply_text(
-        "✅ Ты подписан! Буду присылать расписание каждый день в 8:00.",
+        "✅ Ты подписан! Буду присылать расписание каждый день в 7:00.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -139,7 +139,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_today, pattern="^today$"))
 
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-    scheduler.add_job(send_daily_schedule, "cron", hour=8, minute=0, args=[app.bot])
+    scheduler.add_job(send_daily_schedule, "cron", hour=7, minute=0, args=[app.bot])
     scheduler.add_job(check_changes, "interval", minutes=30, args=[app.bot])
     scheduler.start()
 
