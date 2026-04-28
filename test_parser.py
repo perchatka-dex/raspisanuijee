@@ -1,28 +1,34 @@
-import asyncio
-import os
-from dotenv import load_dotenv
-from telegram import Bot
-from schedule_parser import parse_schedule, format_lesson  # не parser!
-from bot import send_daily_schedule
+from datetime import datetime
+from pathlib import Path
+import unittest
 
-load_dotenv()
+from bot import BASE_DIR, CACHE_FILE, USERS_FILE, get_lessons_for_date
+from schedule_parser import parse_day_label
 
-bot = Bot(token=os.getenv("TOKEN"))
-asyncio.run(send_daily_schedule(bot))
-schedule = parse_schedule()
 
-for day, lessons in list(schedule.items())[:5]:
-    print(f"\n{'='*40}")
-    print(f"  {day}")
-    print('='*40)
-    if lessons:
-        for num, lesson in sorted(lessons.items()):
-            print(format_lesson(num, lesson))
-            print()
-    else:
-        print("  Пар нет")
+class BotScheduleTests(unittest.TestCase):
+    def test_get_lessons_for_date_matches_full_date(self):
+        schedule = {
+            "2026-01-29": {"label": "Срд,29 января", "lessons": {"1": {"name": "January lesson"}}},
+            "2026-04-29": {"label": "Срд,29 апреля", "lessons": {"1": {"name": "April lesson"}}},
+        }
 
-# 2. Тест отправки в телеграм
-print("\n=== ТЕСТ ОТПРАВКИ ===")
-bot = Bot(token=os.getenv("TOKEN"))
-asyncio.run(send_daily_schedule(bot))
+        day, lessons = get_lessons_for_date(schedule, datetime(2026, 4, 29))
+
+        self.assertEqual(day, "Срд,29 апреля")
+        self.assertEqual(lessons["1"]["name"], "April lesson")
+
+    def test_parse_day_label_parses_russian_months(self):
+        parsed = parse_day_label("Срд,29 апреля", current_year=2026)
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.isoformat(), "2026-04-29")
+
+    def test_data_files_are_anchored_to_project_directory(self):
+        self.assertEqual(USERS_FILE, BASE_DIR / "users.json")
+        self.assertEqual(CACHE_FILE, BASE_DIR / "cache.json")
+        self.assertEqual(USERS_FILE.parent, Path(BASE_DIR))
+
+
+if __name__ == "__main__":
+    unittest.main()

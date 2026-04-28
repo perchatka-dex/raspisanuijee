@@ -1,9 +1,25 @@
+from datetime import date
+import re
+
 import requests
 from bs4 import BeautifulSoup
-import re
-import json
 
 URL = "https://conference.aumsu.ru/rasp/OCHNOE/HTML/143.html"
+
+MONTHS_RU = {
+    "января": 1,
+    "февраля": 2,
+    "марта": 3,
+    "апреля": 4,
+    "мая": 5,
+    "июня": 6,
+    "июля": 7,
+    "августа": 8,
+    "сентября": 9,
+    "октября": 10,
+    "ноября": 11,
+    "декабря": 12,
+}
 
 TIMES = {
     "1": "09:00–10:30",
@@ -72,10 +88,26 @@ def parse_lesson_text(text):
 
     return lesson
 
+def parse_day_label(day_text, current_year=None):
+    current_year = current_year or date.today().year
+    match = re.match(r'^(Пнд|Втр|Срд|Чтв|Птн|Сбт),(\d{1,2})\s+([А-Яа-яёЁ]+)$', day_text)
+    if not match:
+        return None
+
+    day = int(match.group(2))
+    month_name = match.group(3).lower()
+    month = MONTHS_RU.get(month_name)
+    if not month:
+        return None
+
+    return date(current_year, month, day)
+
+
 def parse_schedule():
     html = fetch_html()
     soup = BeautifulSoup(html, "html.parser")
     schedule = {}
+    current_year = date.today().year
 
     tables = soup.find_all("table")
 
@@ -84,7 +116,6 @@ def parse_schedule():
         if len(rows) < 2:
             continue
 
-        # заголовок — номера пар
         headers = [td.get_text(strip=True) for td in rows[0].find_all(["td", "th"])]
         pair_indices = {}
         for i, h in enumerate(headers):
@@ -95,24 +126,31 @@ def parse_schedule():
         if not pair_indices:
             continue
 
-        # строки с днями
         for row in rows[1:]:
             cells = row.find_all(["td", "th"])
             texts = [c.get_text(separator=" ", strip=True) for c in cells]
             if not texts:
                 continue
 
-            # первая ячейка — день вида "Пнд,23 февраля"
             day_text = texts[0]
             if not re.match(r'^(Пнд|Втр|Срд|Чтв|Птн|Сбт)', day_text):
                 continue
 
-            schedule[day_text] = {}
+            parsed_date = parse_day_label(day_text, current_year=current_year)
+            if not parsed_date:
+                continue
+
+            lessons = {}
             for col_idx, pair_num in pair_indices.items():
                 if col_idx < len(texts):
                     lesson = parse_lesson_text(texts[col_idx])
                     if lesson:
-                        schedule[day_text][pair_num] = lesson
+                        lessons[pair_num] = lesson
+
+            schedule[parsed_date.isoformat()] = {
+                "label": day_text,
+                "lessons": lessons,
+            }
 
     return schedule
 

@@ -1,10 +1,14 @@
 import asyncio
 import json
 import os
-import re
 import random
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from pathlib import Path
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -15,8 +19,9 @@ from schedule_parser import parse_schedule, format_lesson
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
-USERS_FILE = "users.json"
-CACHE_FILE = "cache.json"
+BASE_DIR = Path(__file__).resolve().parent
+USERS_FILE = BASE_DIR / "users.json"
+CACHE_FILE = BASE_DIR / "cache.json"
 
 WEEKDAYS_RU = {
     0: "Пнд", 1: "Втр", 2: "Срд",
@@ -65,30 +70,36 @@ def is_rate_limited(chat_id: int) -> bool:
     return False
 
 def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE) as f:
+    if USERS_FILE.exists():
+        with USERS_FILE.open(encoding="utf-8") as f:
             return set(json.load(f))
     return set()
 
 def save_users(users):
-    with open(USERS_FILE, "w") as f:
+    with USERS_FILE.open("w", encoding="utf-8") as f:
         json.dump(list(users), f)
+
+def get_lessons_for_date(schedule, target_date):
+    target_key = target_date.date().isoformat()
+    day_schedule = schedule.get(target_key)
+    if not day_schedule:
+        return None, {}
+    return day_schedule["label"], day_schedule["lessons"]
+
 
 def get_today_lessons(schedule):
     today = datetime.now(ZoneInfo("Europe/Moscow"))
-    abbr = WEEKDAYS_RU.get(today.weekday())
-    if not abbr:
-        return None, {}
-    for key, lessons in schedule.items():
-        if key.startswith(abbr):
-            date_match = re.search(r'(\d+)', key)
-            if date_match and int(date_match.group(1)) == today.day:
-                return key, lessons
-    return None, {}
+    return get_lessons_for_date(schedule, today)
 
-def build_message(day, lessons):
+
+def get_tomorrow_lessons(schedule):
+    tomorrow = datetime.now(ZoneInfo("Europe/Moscow")) + timedelta(days=1)
+    return get_lessons_for_date(schedule, tomorrow)
+
+
+def build_message(day, lessons, empty_text="Сегодня пар нет 🎉"):
     if not lessons:
-        return f"📅 {day}\n\nСегодня пар нет 🎉"
+        return f"📅 {day}\n\n{empty_text}"
     parts = [f"📅 {day}"]
     for num, lesson in sorted(lessons.items()):
         parts.append(format_lesson(num, lesson))
@@ -114,12 +125,12 @@ async def send_daily_schedule(bot: Bot):
 
 async def check_changes(bot: Bot):
     schedule = parse_schedule()
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE) as f:
+    if CACHE_FILE.exists():
+        with CACHE_FILE.open(encoding="utf-8") as f:
             old = json.load(f)
     else:
         old = {}
-    with open(CACHE_FILE, "w") as f:
+    with CACHE_FILE.open("w", encoding="utf-8") as f:
         json.dump(schedule, f, ensure_ascii=False)
     if old and old != schedule:
         await broadcast(bot, "⚠️ Расписание изменилось! Проверь /today")
@@ -153,6 +164,18 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     joke = get_joke_from_site()
     await update.message.reply_text(f"😄 Смехуечка:\n\n{joke}")
 
+
+async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_rate_limited(update.effective_chat.id):
+        await update.message.reply_text("⏳ Подожди 30 секунд перед следующим запросом.")
+        return
+    schedule = parse_schedule()
+    day, lessons = get_tomorrow_lessons(schedule)
+    if day is None:
+        await update.message.reply_text("Завтра пар нет 🎉")
+        return
+    await update.message.reply_text(build_message(day, lessons, empty_text="Завтра пар нет 🎉"))
+
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -171,6 +194,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("today", today))
+    app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CallbackQueryHandler(button_today, pattern="^today$"))
 
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
