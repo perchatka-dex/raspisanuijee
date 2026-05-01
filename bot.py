@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import random
@@ -13,7 +12,6 @@ except ImportError:
 from dotenv import load_dotenv
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from schedule_parser import parse_schedule, format_lesson
 
@@ -114,7 +112,8 @@ async def broadcast(bot: Bot, message: str):
         except Exception as e:
             print(f"Ошибка {chat_id}: {e}")
 
-async def send_daily_schedule(bot: Bot):
+async def send_daily_schedule(context: ContextTypes.DEFAULT_TYPE):
+    bot = context.bot
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
@@ -123,7 +122,8 @@ async def send_daily_schedule(bot: Bot):
     joke = get_joke_from_site()
     await broadcast(bot, f"😄 Смехуечка:\n\n{joke}")
 
-async def check_changes(bot: Bot):
+async def check_changes(context: ContextTypes.DEFAULT_TYPE):
+    bot = context.bot
     schedule = parse_schedule()
     if CACHE_FILE.exists():
         with CACHE_FILE.open(encoding="utf-8") as f:
@@ -197,10 +197,10 @@ def main():
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CallbackQueryHandler(button_today, pattern="^today$"))
 
-    scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-    scheduler.add_job(send_daily_schedule, "cron", hour=7, minute=0, args=[app.bot])
-    scheduler.add_job(check_changes, "interval", minutes=30, args=[app.bot])
-    scheduler.start()
+    job_queue = app.job_queue
+    tz = ZoneInfo("Europe/Moscow")
+    job_queue.run_daily(send_daily_schedule, time=datetime.now(tz).replace(hour=7, minute=0, second=0, microsecond=0).timetz())
+    job_queue.run_repeating(check_changes, interval=1800, first=10)
 
     print("✅ Бот запущен")
     app.run_polling()
