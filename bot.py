@@ -1,7 +1,7 @@
 import json
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
 from pathlib import Path
 
 from zoneinfo import ZoneInfo
@@ -173,6 +173,28 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text(build_message(day, lessons, empty_text="Завтра пар нет 🎉"))
 
+async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_rate_limited(update.effective_chat.id):
+        await update.message.reply_text("⏳ Подожди 30 секунд перед следующим запросом.")
+        return
+    schedule = parse_schedule()
+    today = datetime.now(ZoneInfo("Europe/Moscow")).date()
+    # Начало текущей недели (понедельник)
+    monday = today - timedelta(days=today.weekday())
+    messages = []
+    for i in range(6):  # Пн–Сб
+        day_date = monday + timedelta(days=i)
+        key = day_date.isoformat()
+        day_schedule = schedule.get(key)
+        if day_schedule:
+            msg = build_message(day_schedule["label"], day_schedule["lessons"])
+            messages.append(msg)
+    if not messages:
+        await update.message.reply_text("На этой неделе пар нет 🎉")
+        return
+    await update.message.reply_text("\n\n─────────────────\n\n".join(messages))
+
+
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -192,11 +214,12 @@ def main():
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("today", today))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
+    app.add_handler(CommandHandler("week", week))
     app.add_handler(CallbackQueryHandler(button_today, pattern="^today$"))
 
     job_queue = app.job_queue
     tz = ZoneInfo("Europe/Moscow")
-    job_queue.run_daily(send_daily_schedule, time=datetime.now(tz).replace(hour=7, minute=0, second=0, microsecond=0).timetz())
+    job_queue.run_daily(send_daily_schedule, time=dtime(7, 0, tzinfo=tz))
     job_queue.run_repeating(check_changes, interval=1800, first=10)
 
     print("✅ Бот запущен")
