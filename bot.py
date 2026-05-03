@@ -36,6 +36,14 @@ JOKES = [
     "Преподаватель: — Кто не сдаст зачёт, того отчислю!\nСтудент: — А кто сдаст?\nПреподаватель: — Тех удивлюсь.",
 ]
 
+SCHEDULE_KEYBOARD = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton("📅 Сегодня", callback_data="today"),
+        InlineKeyboardButton("📅 Завтра", callback_data="tomorrow"),
+        InlineKeyboardButton("📅 Неделя", callback_data="week"),
+    ]
+])
+
 def get_random_joke() -> str:
     return random.choice(JOKES)
 
@@ -100,6 +108,18 @@ def build_message(day, lessons, empty_text="Сегодня пар нет 🎉"):
         parts.append(format_lesson(num, lesson))
     return "\n\n".join(parts)
 
+def build_week_message(schedule):
+    today = datetime.now(ZoneInfo("Europe/Moscow")).date()
+    monday = today - timedelta(days=today.weekday())
+    messages = []
+    for i in range(6):  # Пн–Сб
+        day_date = monday + timedelta(days=i)
+        key = day_date.isoformat()
+        day_schedule = schedule.get(key)
+        if day_schedule:
+            messages.append(build_message(day_schedule["label"], day_schedule["lessons"]))
+    return messages
+
 async def broadcast(bot: Bot, message: str):
     users = load_users()
     print(f"Рассылка для {len(users)} пользователей")
@@ -136,10 +156,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     users.add(update.effective_chat.id)
     save_users(users)
-    keyboard = [[InlineKeyboardButton("📅 Расписание на сегодня", callback_data="today")]]
     await update.message.reply_text(
         "✅ Ты подписан! Буду присылать расписание каждый день в 7:00.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=SCHEDULE_KEYBOARD
     )
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -155,9 +174,9 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
-        await update.message.reply_text("Сегодня выходной 🎉")
+        await update.message.reply_text("Сегодня выходной 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    await update.message.reply_text(build_message(day, lessons))
+    await update.message.reply_text(build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
     joke = get_joke_from_site()
     await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
 
@@ -169,9 +188,12 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
     day, lessons = get_tomorrow_lessons(schedule)
     if day is None:
-        await update.message.reply_text("Завтра пар нет 🎉")
+        await update.message.reply_text("Завтра пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    await update.message.reply_text(build_message(day, lessons, empty_text="Завтра пар нет 🎉"))
+    await update.message.reply_text(
+        build_message(day, lessons, empty_text="Завтра пар нет 🎉"),
+        reply_markup=SCHEDULE_KEYBOARD
+    )
     joke = get_joke_from_site()
     await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
 
@@ -180,21 +202,14 @@ async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Подожди 30 секунд перед следующим запросом.")
         return
     schedule = parse_schedule()
-    today = datetime.now(ZoneInfo("Europe/Moscow")).date()
-    # Начало текущей недели (понедельник)
-    monday = today - timedelta(days=today.weekday())
-    messages = []
-    for i in range(6):  # Пн–Сб
-        day_date = monday + timedelta(days=i)
-        key = day_date.isoformat()
-        day_schedule = schedule.get(key)
-        if day_schedule:
-            msg = build_message(day_schedule["label"], day_schedule["lessons"])
-            messages.append(msg)
+    messages = build_week_message(schedule)
     if not messages:
-        await update.message.reply_text("На этой неделе пар нет 🎉")
+        await update.message.reply_text("На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    await update.message.reply_text("\n\n─────────────────\n\n".join(messages))
+    await update.message.reply_text(
+        "\n\n─────────────────\n\n".join(messages),
+        reply_markup=SCHEDULE_KEYBOARD
+    )
     joke = get_joke_from_site()
     await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
 
@@ -208,9 +223,44 @@ async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
-        await query.edit_message_text("Сегодня выходной 🎉")
+        await query.edit_message_text("Сегодня выходной 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    await query.edit_message_text(build_message(day, lessons))
+    await query.edit_message_text(build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
+
+
+async def button_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if is_rate_limited(query.from_user.id):
+        await query.answer("⏳ Подожди 30 секунд.", show_alert=True)
+        return
+    schedule = parse_schedule()
+    day, lessons = get_tomorrow_lessons(schedule)
+    if day is None:
+        await query.edit_message_text("Завтра пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
+        return
+    await query.edit_message_text(
+        build_message(day, lessons, empty_text="Завтра пар нет 🎉"),
+        reply_markup=SCHEDULE_KEYBOARD
+    )
+
+
+async def button_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if is_rate_limited(query.from_user.id):
+        await query.answer("⏳ Подожди 30 секунд.", show_alert=True)
+        return
+    schedule = parse_schedule()
+    messages = build_week_message(schedule)
+    if not messages:
+        await query.edit_message_text("На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
+        return
+    await query.edit_message_text(
+        "\n\n─────────────────\n\n".join(messages),
+        reply_markup=SCHEDULE_KEYBOARD
+    )
+
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -220,6 +270,8 @@ def main():
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CommandHandler("week", week))
     app.add_handler(CallbackQueryHandler(button_today, pattern="^today$"))
+    app.add_handler(CallbackQueryHandler(button_tomorrow, pattern="^tomorrow$"))
+    app.add_handler(CallbackQueryHandler(button_week, pattern="^week$"))
 
     job_queue = app.job_queue
     tz = ZoneInfo("Europe/Moscow")
