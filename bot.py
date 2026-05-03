@@ -183,9 +183,6 @@ async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if is_rate_limited(query.from_user.id):
-        await query.answer("⏳ Подожди 3 секунды.", show_alert=True)
-        return
     chat_id = query.message.chat_id
     await _delete_previous(context, chat_id)
     schedule = parse_schedule()
@@ -199,9 +196,6 @@ async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if is_rate_limited(query.from_user.id):
-        await query.answer("⏳ Подожди 3 секунды.", show_alert=True)
-        return
     chat_id = query.message.chat_id
     await _delete_previous(context, chat_id)
     schedule = parse_schedule()
@@ -219,9 +213,6 @@ async def button_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if is_rate_limited(query.from_user.id):
-        await query.answer("⏳ Подожди 3 секунды.", show_alert=True)
-        return
     chat_id = query.message.chat_id
     await _delete_previous(context, chat_id)
     schedule = parse_schedule()
