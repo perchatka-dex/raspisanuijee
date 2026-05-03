@@ -172,6 +172,8 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Завтра пар нет 🎉")
         return
     await update.message.reply_text(build_message(day, lessons, empty_text="Завтра пар нет 🎉"))
+    joke = get_joke_from_site()
+    await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
 
 async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_rate_limited(update.effective_chat.id):
@@ -193,6 +195,8 @@ async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("На этой неделе пар нет 🎉")
         return
     await update.message.reply_text("\n\n─────────────────\n\n".join(messages))
+    joke = get_joke_from_site()
+    await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
 
 
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
