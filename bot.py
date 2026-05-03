@@ -1,6 +1,5 @@
 import json
 import os
-import random
 from datetime import datetime, timedelta, time as dtime
 from pathlib import Path
 
@@ -18,24 +17,6 @@ BASE_DIR = Path(__file__).resolve().parent
 USERS_FILE = BASE_DIR / "users.json"
 CACHE_FILE = BASE_DIR / "cache.json"
 
-WEEKDAYS_RU = {
-    0: "Пнд", 1: "Втр", 2: "Срд",
-    3: "Чтв", 4: "Птн", 5: "Сбт"
-}
-
-JOKES = [
-    "Штирлиц шёл по коридору. Навстречу шёл Мюллер.\n— Штирлиц, вы шпион?\n— Нет.\n— Верю, — сказал Мюллер. — Шпионы так не одеваются.",
-    "— Доктор, я буду жить?\n— А смысл?",
-    "Муж приходит домой и видит жену с чемоданом.\n— Ты куда?\n— От тебя ухожу!\n— А я думал, ты возвращаешься.",
-    "Программист заходит в бар, заказывает 1 пиво, 0 пива, 999999 пива, -1 пиво, NULL пива, выходит через служебный вход.",
-    "— Как дела?\n— Как у всех.\n— Плохо?\n— Нет, не знаю как у всех, но у меня плохо.",
-    "Студент сдаёт экзамен:\n— Билет 1. Всё знаю!\n— Билет 2. Всё знаю!\n— Билет 3. Ничего не знаю.\n— Странно...\n— Я только первые два учил.",
-    "— Почему ты опоздал?\n— Будильник не зазвонил.\n— Почему?\n— Я его не завёл.\n— Почему?\n— Я знал, что опоздаю.",
-    "Встречаются два студента:\n— Ты на лекцию?\n— Нет, я так хожу.",
-    "— Сколько программистов нужно, чтобы вкрутить лампочку?\n— Ни одного, это проблема железа.",
-    "Преподаватель: — Кто не сдаст зачёт, того отчислю!\nСтудент: — А кто сдаст?\nПреподаватель: — Тех удивлюсь.",
-]
-
 SCHEDULE_KEYBOARD = InlineKeyboardMarkup([
     [
         InlineKeyboardButton("📅 Сегодня", callback_data="today"),
@@ -43,23 +24,6 @@ SCHEDULE_KEYBOARD = InlineKeyboardMarkup([
         InlineKeyboardButton("📅 Неделя", callback_data="week"),
     ]
 ])
-
-def get_random_joke() -> str:
-    return random.choice(JOKES)
-
-def get_joke_from_site() -> str:
-    try:
-        import requests
-        from bs4 import BeautifulSoup
-        resp = requests.get("https://anekdoty.ru/pro-shtirlica/", timeout=5)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        items = soup.select("li .holder-body p")
-        if items:
-            item = random.choice(items)
-            return item.get_text(separator="\n").strip()
-    except Exception as e:
-        print(f"Ошибка парсинга анекдота: {e}")
-    return get_random_joke()
 
 last_request = {}
 COOLDOWN = 3
@@ -89,16 +53,13 @@ def get_lessons_for_date(schedule, target_date):
         return None, {}
     return day_schedule["label"], day_schedule["lessons"]
 
-
 def get_today_lessons(schedule):
     today = datetime.now(ZoneInfo("Europe/Moscow"))
     return get_lessons_for_date(schedule, today)
 
-
 def get_tomorrow_lessons(schedule):
     tomorrow = datetime.now(ZoneInfo("Europe/Moscow")) + timedelta(days=1)
     return get_lessons_for_date(schedule, tomorrow)
-
 
 def build_message(day, lessons, empty_text="Сегодня пар нет 🎉"):
     if not lessons:
@@ -130,17 +91,13 @@ async def broadcast(bot: Bot, message: str):
             print(f"Ошибка {chat_id}: {e}")
 
 async def send_daily_schedule(context: ContextTypes.DEFAULT_TYPE):
-    bot = context.bot
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
         return
-    await broadcast(bot, build_message(day, lessons))
-    joke = get_joke_from_site()
-    await broadcast(bot, f"😄 Смешинка:\n\n{joke}")
+    await broadcast(context.bot, build_message(day, lessons))
 
 async def check_changes(context: ContextTypes.DEFAULT_TYPE):
-    bot = context.bot
     schedule = parse_schedule()
     if CACHE_FILE.exists():
         with CACHE_FILE.open(encoding="utf-8") as f:
@@ -150,7 +107,21 @@ async def check_changes(context: ContextTypes.DEFAULT_TYPE):
     with CACHE_FILE.open("w", encoding="utf-8") as f:
         json.dump(schedule, f, ensure_ascii=False)
     if old and old != schedule:
-        await broadcast(bot, "⚠️ Расписание изменилось! Проверь /today")
+        await broadcast(context.bot, "⚠️ Расписание изменилось! Проверь /today")
+
+async def _delete_previous(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    key = f"last_msgs_{chat_id}"
+    ids = context.bot_data.get(key)
+    if ids:
+        for mid in ids:
+            try:
+                await context.bot.delete_message(chat_id, mid)
+            except Exception:
+                pass
+        del context.bot_data[key]
+
+def _save_msgs(context: ContextTypes.DEFAULT_TYPE, chat_id: int, *msg_ids):
+    context.bot_data[f"last_msgs_{chat_id}"] = list(msg_ids)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
@@ -167,21 +138,6 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_users(users)
     await update.message.reply_text("❌ Ты отписан от рассылки.")
 
-async def _delete_previous(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    """Удаляет предыдущее сообщение с расписанием и шуткой для данного чата."""
-    key = f"last_msgs_{chat_id}"
-    ids = context.bot_data.get(key)
-    if ids:
-        for mid in ids:
-            try:
-                await context.bot.delete_message(chat_id, mid)
-            except Exception:
-                pass
-        del context.bot_data[key]
-
-async def _save_msgs(context: ContextTypes.DEFAULT_TYPE, chat_id: int, *msg_ids):
-    context.bot_data[f"last_msgs_{chat_id}"] = list(msg_ids)
-
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_rate_limited(update.effective_chat.id):
         await update.message.reply_text("⏳ Подожди 3 секунды перед следующим запросом.")
@@ -191,11 +147,8 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if day is None:
         await update.message.reply_text("Сегодня выходной 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    sched_msg = await update.message.reply_text(build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
-    joke = get_joke_from_site()
-    joke_msg = await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
-    await _save_msgs(context, update.effective_chat.id, sched_msg.message_id, joke_msg.message_id)
-
+    msg = await update.message.reply_text(build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
+    _save_msgs(context, update.effective_chat.id, msg.message_id)
 
 async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_rate_limited(update.effective_chat.id):
@@ -206,13 +159,11 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if day is None:
         await update.message.reply_text("Завтра пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    sched_msg = await update.message.reply_text(
+    msg = await update.message.reply_text(
         build_message(day, lessons, empty_text="Завтра пар нет 🎉"),
         reply_markup=SCHEDULE_KEYBOARD
     )
-    joke = get_joke_from_site()
-    joke_msg = await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
-    await _save_msgs(context, update.effective_chat.id, sched_msg.message_id, joke_msg.message_id)
+    _save_msgs(context, update.effective_chat.id, msg.message_id)
 
 async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_rate_limited(update.effective_chat.id):
@@ -223,14 +174,11 @@ async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not messages:
         await update.message.reply_text("На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
         return
-    sched_msg = await update.message.reply_text(
+    msg = await update.message.reply_text(
         "\n\n─────────────────\n\n".join(messages),
         reply_markup=SCHEDULE_KEYBOARD
     )
-    joke = get_joke_from_site()
-    joke_msg = await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
-    await _save_msgs(context, update.effective_chat.id, sched_msg.message_id, joke_msg.message_id)
-
+    _save_msgs(context, update.effective_chat.id, msg.message_id)
 
 async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -243,14 +191,10 @@ async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
-        sched_msg = await context.bot.send_message(chat_id, "Сегодня выходной 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        await _save_msgs(context, chat_id, sched_msg.message_id)
-        return
-    sched_msg = await context.bot.send_message(chat_id, build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
-    joke = get_joke_from_site()
-    joke_msg = await context.bot.send_message(chat_id, f"😄 Смешинка:\n\n{joke}")
-    await _save_msgs(context, chat_id, sched_msg.message_id, joke_msg.message_id)
-
+        msg = await context.bot.send_message(chat_id, "Сегодня выходной 🎉", reply_markup=SCHEDULE_KEYBOARD)
+    else:
+        msg = await context.bot.send_message(chat_id, build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
+    _save_msgs(context, chat_id, msg.message_id)
 
 async def button_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -263,18 +207,14 @@ async def button_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
     day, lessons = get_tomorrow_lessons(schedule)
     if day is None:
-        sched_msg = await context.bot.send_message(chat_id, "Завтра пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        await _save_msgs(context, chat_id, sched_msg.message_id)
-        return
-    sched_msg = await context.bot.send_message(
-        chat_id,
-        build_message(day, lessons, empty_text="Завтра пар нет 🎉"),
-        reply_markup=SCHEDULE_KEYBOARD
-    )
-    joke = get_joke_from_site()
-    joke_msg = await context.bot.send_message(chat_id, f"😄 Смешинка:\n\n{joke}")
-    await _save_msgs(context, chat_id, sched_msg.message_id, joke_msg.message_id)
-
+        msg = await context.bot.send_message(chat_id, "Завтра пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
+    else:
+        msg = await context.bot.send_message(
+            chat_id,
+            build_message(day, lessons, empty_text="Завтра пар нет 🎉"),
+            reply_markup=SCHEDULE_KEYBOARD
+        )
+    _save_msgs(context, chat_id, msg.message_id)
 
 async def button_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -287,84 +227,14 @@ async def button_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
     messages = build_week_message(schedule)
     if not messages:
-        sched_msg = await context.bot.send_message(chat_id, "На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        await _save_msgs(context, chat_id, sched_msg.message_id)
-        return
-    sched_msg = await context.bot.send_message(
-        chat_id,
-        "\n\n─────────────────\n\n".join(messages),
-        reply_markup=SCHEDULE_KEYBOARD
-    )
-    joke = get_joke_from_site()
-    joke_msg = await context.bot.send_message(chat_id, f"😄 Смешинка:\n\n{joke}")
-    await _save_msgs(context, chat_id, sched_msg.message_id, joke_msg.message_id)
-    joke = get_joke_from_site()
-    await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
-
-async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if is_rate_limited(update.effective_chat.id):
-        await update.message.reply_text("⏳ Подожди 30 секунд перед следующим запросом.")
-        return
-    schedule = parse_schedule()
-    messages = build_week_message(schedule)
-    if not messages:
-        await update.message.reply_text("На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        return
-    await update.message.reply_text(
-        "\n\n─────────────────\n\n".join(messages),
-        reply_markup=SCHEDULE_KEYBOARD
-    )
-    joke = get_joke_from_site()
-    await update.message.reply_text(f"😄 Смешинка:\n\n{joke}")
-
-
-async def button_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if is_rate_limited(query.from_user.id):
-        await query.answer("⏳ Подожди 30 секунд.", show_alert=True)
-        return
-    schedule = parse_schedule()
-    day, lessons = get_today_lessons(schedule)
-    if day is None:
-        await query.edit_message_text("Сегодня выходной 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        return
-    await query.edit_message_text(build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
-
-
-async def button_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if is_rate_limited(query.from_user.id):
-        await query.answer("⏳ Подожди 30 секунд.", show_alert=True)
-        return
-    schedule = parse_schedule()
-    day, lessons = get_tomorrow_lessons(schedule)
-    if day is None:
-        await query.edit_message_text("Завтра пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        return
-    await query.edit_message_text(
-        build_message(day, lessons, empty_text="Завтра пар нет 🎉"),
-        reply_markup=SCHEDULE_KEYBOARD
-    )
-
-
-async def button_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if is_rate_limited(query.from_user.id):
-        await query.answer("⏳ Подожди 30 секунд.", show_alert=True)
-        return
-    schedule = parse_schedule()
-    messages = build_week_message(schedule)
-    if not messages:
-        await query.edit_message_text("На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
-        return
-    await query.edit_message_text(
-        "\n\n─────────────────\n\n".join(messages),
-        reply_markup=SCHEDULE_KEYBOARD
-    )
-
+        msg = await context.bot.send_message(chat_id, "На этой неделе пар нет 🎉", reply_markup=SCHEDULE_KEYBOARD)
+    else:
+        msg = await context.bot.send_message(
+            chat_id,
+            "\n\n─────────────────\n\n".join(messages),
+            reply_markup=SCHEDULE_KEYBOARD
+        )
+    _save_msgs(context, chat_id, msg.message_id)
 
 def main():
     app = Application.builder().token(TOKEN).build()
