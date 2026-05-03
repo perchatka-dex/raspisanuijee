@@ -62,7 +62,7 @@ def get_joke_from_site() -> str:
     return get_random_joke()
 
 last_request = {}
-COOLDOWN = 30
+COOLDOWN = 3
 
 def is_rate_limited(chat_id: int) -> bool:
     now = datetime.now()
