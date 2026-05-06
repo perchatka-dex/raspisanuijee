@@ -81,12 +81,12 @@ def build_week_message(schedule):
             messages.append(build_message(day_schedule["label"], day_schedule["lessons"]))
     return messages
 
-async def broadcast(bot: Bot, message: str):
+async def broadcast(bot: Bot, message: str, reply_markup=None):
     users = load_users()
     print(f"Рассылка для {len(users)} пользователей")
     for chat_id in users:
         try:
-            await bot.send_message(chat_id, message)
+            await bot.send_message(chat_id, message, reply_markup=reply_markup)
         except Exception as e:
             print(f"Ошибка {chat_id}: {e}")
 
@@ -95,7 +95,7 @@ async def send_daily_schedule(context: ContextTypes.DEFAULT_TYPE):
     day, lessons = get_today_lessons(schedule)
     if day is None:
         return
-    await broadcast(context.bot, build_message(day, lessons))
+    await broadcast(context.bot, build_message(day, lessons), reply_markup=SCHEDULE_KEYBOARD)
 
 async def check_changes(context: ContextTypes.DEFAULT_TYPE):
     schedule = parse_schedule()
