@@ -1,0 +1,12 @@
+services:
+  bot:
+    build: .
+    container_name: tg-schedule-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./users.json:/app/users.json
+      - ./cache.json:/app/cache.json
+    environment:
+      - TZ=Europe/Moscow
