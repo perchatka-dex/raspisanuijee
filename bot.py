@@ -83,16 +83,21 @@ def build_week_message(schedule):
             messages.append(build_message(day_schedule["label"], day_schedule["lessons"]))
     return messages
 
-async def broadcast(bot: Bot, message: str, reply_markup=None):
+async def broadcast(bot: Bot, message: str, reply_markup=None, silent: bool = False):
     users = load_users()
     print(f"Рассылка для {len(users)} пользователей")
     for chat_id in users:
         try:
-            await bot.send_message(chat_id, message, reply_markup=reply_markup)
+            await bot.send_message(chat_id, message, reply_markup=reply_markup, disable_notification=silent)
         except Exception as e:
             print(f"Ошибка {chat_id}: {e}")
 
 async def send_daily_schedule(context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(ZoneInfo("Europe/Moscow"))
+    # Воскресенье = 6, Суббота = 5
+    if now.weekday() in (5, 6):
+        await broadcast(context.bot, "😴 Сегодня выходной, пар нет!", silent=True)
+        return
     schedule = parse_schedule()
     day, lessons = get_today_lessons(schedule)
     if day is None:
