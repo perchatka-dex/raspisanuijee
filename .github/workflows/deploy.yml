@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ~/raspisanuijee
+            git pull
+            sudo docker build -t raspisanuijee .
+            sudo docker stop raspisanuijee
+            sudo docker rm raspisanuijee
+            sudo docker run -d --name raspisanuijee --restart always --env-file ~/.env -e HTTPS_PROXY=socks5h://172.17.0.1:10808 raspisanuijee
