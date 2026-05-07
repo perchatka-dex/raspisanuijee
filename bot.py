@@ -14,8 +14,10 @@ from schedule_parser import parse_schedule, format_lesson
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 BASE_DIR = Path(__file__).resolve().parent
-USERS_FILE = BASE_DIR / "users.json"
-CACHE_FILE = BASE_DIR / "cache.json"
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+USERS_FILE = DATA_DIR / "users.json"
+CACHE_FILE = DATA_DIR / "cache.json"
 
 SCHEDULE_KEYBOARD = InlineKeyboardMarkup([
     [
