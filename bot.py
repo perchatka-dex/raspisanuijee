@@ -21,9 +21,9 @@ CACHE_FILE = DATA_DIR / "cache.json"
 
 SCHEDULE_KEYBOARD = InlineKeyboardMarkup([
     [
-        InlineKeyboardButton("⚪ Сегодня", callback_data="today"),
-        InlineKeyboardButton("🔵 Завтра", callback_data="tomorrow"),
-        InlineKeyboardButton("🔴 Неделя", callback_data="week"),
+        InlineKeyboardButton("📌 Сегодня", callback_data="today"),
+        InlineKeyboardButton("🌙 Завтра", callback_data="tomorrow"),
+        InlineKeyboardButton("📆 Неделя", callback_data="week"),
     ]
 ])
 
