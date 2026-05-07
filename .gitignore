@@ -1,10 +1,9 @@
-.vercel
 .env
-users.json
-cache.json
 __pycache__/
 .venv/
 .idea/
 .vscode/
-Pycharm/
-bot tg/
+.kilo/
+data/
+*.deb
+*.pyc
